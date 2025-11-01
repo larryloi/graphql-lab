@@ -1,0 +1,93 @@
+# version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    hostname: mysql
+    env_file:
+      - docker-compose.env
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/:/sql/
+    networks:
+      - homelab_net
+
+#   postgres:
+#     image: postgres:16
+#     container_name: postgres-db
+#     restart: unless-stopped
+#     environment:
+#       POSTGRES_USER: admin
+#       POSTGRES_PASSWORD: Abcd1234
+#       POSTGRES_DB: homelab
+#       TZ: "Asia/Shanghai"
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     ports:
+#       - "5432:5432"
+#     networks:
+#       - homelab_net
+# 
+#   pgadmin:
+#     image: dpage/pgadmin4:8
+#     container_name: pgadmin
+#     restart: unless-stopped
+#     environment:
+#       PGADMIN_DEFAULT_EMAIL: admin@homelab.com
+#       PGADMIN_DEFAULT_PASSWORD: Abcd1234
+#       PGADMIN_CONFIG_SERVER_MODE: "False"   # allows multiple users in one session
+#       TZ: "Asia/Shanghai"
+#     volumes:
+#       - pgadmin_data:/var/lib/pgadmin
+#     ports:
+#       - "8080:80"
+#     depends_on:
+#       - postgres
+#     networks:
+#       - homelab_net
+# 
+#   graphql:
+#     container_name: graphql
+#     restart: always
+#     image: graphile/postgraphile
+#     depends_on:
+#       - postgres
+#     environment:
+#       DATABASE_URL: postgres://admin:Abcd1234@postgres:5432/demo_db # To be moved to environment file
+#     expose:
+#       - 5000
+#     ports:
+#       - 5000:5000
+#     # command: ["postgraphile", "--connection", $DATABASE_URL, "--host", "0.0.0.0", "--port", "5432", "--schema", "demo1"]
+#     links:
+#       - postgres
+#     networks:
+#       - homelab_net
+
+  # Local GraphQL API built from this repository
+  graphql_api:
+    build: .
+    container_name: graphql_api
+    hostname: graphql_api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    env_file:
+      - docker-compose.env
+    depends_on:
+      - mysql
+    networks:
+      - homelab_net
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  mysql_data:
+
+networks:
+  homelab_net:
+    driver: bridge
+

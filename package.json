@@ -1,0 +1,15 @@
+{
+  "name": "graphql",
+  "version": "0.1.0",
+  "description": "Small GraphQL API for demo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-graphql": "^0.12.0",
+    "mysql2": "^3.3.0",
+    "graphql": "^15.8.0"
+  }
+}
