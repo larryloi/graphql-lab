@@ -1,5 +1,7 @@
 -- Create a demo database and users table for the GraphQL demo
-CREATE DATABASE IF NOT EXISTS demo1;
+CREATE DATABASE IF NOT EXISTS demo1
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
 USE demo1;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -7,7 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL,
   UNIQUE KEY unique_email (email)
-);
+) ENGINE=INNODB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 -- Seed data (idempotent)
 INSERT INTO users (name, email) VALUES

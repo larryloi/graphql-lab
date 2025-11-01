@@ -1,4 +1,6 @@
-CREATE DATABASE IF NOT EXISTS demonslayer;
+CREATE DATABASE IF NOT EXISTS demonslayer
+    DEFAULT CHARACTER SET utf8mb4
+    DEFAULT COLLATE utf8mb4_unicode_ci;
 USE demonslayer;
 
 CREATE TABLE IF NOT EXISTS `slayers` (
@@ -7,7 +9,9 @@ CREATE TABLE IF NOT EXISTS `slayers` (
     `breathing_style` VARCHAR(85) NULL,
     `age` INT NULL,
     PRIMARY KEY (`id`)
-) ENGINE=INNODB;
+ ) ENGINE=INNODB
+     DEFAULT CHARSET=utf8mb4
+     COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `demons` (
     `id` INT NOT NULL AUTO_INCREMENT,
@@ -15,7 +19,9 @@ CREATE TABLE IF NOT EXISTS `demons` (
     `level` INT NULL,
     `age` INT NULL,
     PRIMARY KEY (`id`)
-) ENGINE=INNODB;
+ ) ENGINE=INNODB
+     DEFAULT CHARSET=utf8mb4
+     COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO slayers (name, breathing_style, age) VALUES 
 ('富岡義勇', 'Water Breathing', 23),
