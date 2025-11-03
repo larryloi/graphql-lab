@@ -21,6 +21,15 @@ const demonPool = mysql.createPool({
     charset: 'utf8mb4',
 });
 
+// inventory DB pool
+const inventoryPool = mysql.createPool({
+    host: process.env.INVENTORY_DATABASE_HOST || process.env.DATABASE_HOST || 'mysql',
+    user: process.env.INVENTORY_DATABASE_USER || process.env.DATABASE_USER || 'root',
+    password: process.env.INVENTORY_DATABASE_PASSWORD || process.env.DATABASE_PASSWORD || '',
+    database: process.env.INVENTORY_DATABASE_NAME || 'inventory',
+    charset: 'utf8mb4',
+});
+
 const root = {
     users: (args) => {
         // Query all users
@@ -76,6 +85,26 @@ const root = {
             });
         });
     },
+    ordersByIssuedAt: (args) => {
+        const issuedAt = args.issued_at;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE issued_at >= ? AND status = ?', [issuedAt, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    },
+    ordersByIssuedAtMins: (args) => {
+        const issuedAtMins = args.issuedAtMins;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE issued_at >= TIMESTAMPADD(MINUTE, ? * -1, NOW()) AND status = ?', [issuedAtMins, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    }
 };
 
 const app = express();

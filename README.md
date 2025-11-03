@@ -71,59 +71,192 @@ make mysql.create.schema
 
 	- List demons
 
-	```graphql
-	query { demons { id name level age } }
-	```
+	# graphql-lab
 
-	- curl (list slayers)
+	Lightweight demo: a Node.js GraphQL API (Express + express-graphql) backed by MySQL, packaged with Docker and docker-compose.
+
+	This repo includes:
+	- `Dockerfile` to build the GraphQL service image
+	- `docker-compose.yaml` that runs a MySQL server plus the GraphQL service
+	- `sql/` demo schemas and seeds for `demo1`, `demonslayer`, and `inventory`
+
+	Quick goals covered here:
+	- start the app locally with Docker
+	- import demo schemas (UTF‑8 aware)
+	- example GraphQL queries (including orders queries)
+
+	## Quickstart (recommended)
+
+	Prerequisites: Docker and docker-compose plugin (modern `docker compose`).
+
+	1. Start MySQL and the GraphQL service from the repo root:
 
 	```bash
-	curl -s -X POST http://localhost:4000/graphql \
-		-H "Content-Type: application/json; charset=utf-8" \
-		-d '{"query":"{ slayers { id name breathing_style age } }"}' | jq
+	cd /docker/graphql-lab
+	docker compose up -d mysql graphql
 	```
 
-## Environment configuration
+	Note: the compose service name for the app in this repo is `graphql` (not `graphql_api`).
 
-All environment variables used by the `graphql_api` service are in `docker-compose.env`.
-Key vars:
+	2. Import demo schemas and seed data (this uses the MySQL client with utf8mb4):
 
-- `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` — primary DB (demo1)
-- `DEMON_DATABASE_HOST`, `DEMON_DATABASE_USER`, `DEMON_DATABASE_PASSWORD`, `DEMON_DATABASE_NAME` — secondary DB used for slayers/demons
+	```bash
+	make mysql.create.schema
+	```
 
-If you edit `docker-compose.env` you can restart the service:
+	3. Open GraphiQL in your browser:
 
-```bash
-docker compose up -d --force-recreate graphql_api
-```
+	- http://localhost:4000/graphql
 
-## Charset / UTF-8 notes
+	4. Recreate demo data (destructive) if you need a clean state:
 
-To display CJK and emoji correctly we ensure three things:
-
-1. Database and tables are created with `DEFAULT CHARACTER SET utf8mb4` and `COLLATE utf8mb4_unicode_ci` (see `sql/` files).
-2. The MySQL client used for importing SQL must use `--default-character-set=utf8mb4` (Makefile uses this flag).
-3. The Node app uses `mysql2` and the connection pools set `charset: 'utf8mb4'`. The server also appends `charset=utf-8` to HTTP responses so browsers decode GraphiQL/JSON correctly.
-
-If characters still appear garbled after these fixes it usually means the data was imported earlier with the wrong client charset and is double-encoded. Two repair options:
-
-- Re-import (recommended for demo data):
 	```bash
 	make mysql.reset
 	make mysql.create.schema
 	```
-- In-place repair (advanced, backup first):
-	```sql
-	-- run inside mysql client
-	UPDATE demonslayer.slayers
-		SET name = CONVERT(BINARY(CONVERT(name USING latin1)) USING utf8mb4);
+
+	## Example GraphQL queries
+
+	Paste these into the left editor in GraphiQL and use the Variables pane when shown.
+
+	- List slayers:
+
+	```graphql
+	query { slayers { id name breathing_style age } }
 	```
 
-## Useful Make targets
+	- Single slayer by id:
 
-- `make mysql.create.schema` — import SQL files (uses UTF-8 client)
-- `make mysql.reset` — drops demo databases (demo1, demonslayer) so you can re-import
+	```graphql
+	query { slayer(id: 1) { id name breathing_style age } }
+	```
 
----
+	- List demons:
 
-If you want I can add automated tests or a small script that performs a sample query and asserts UTF‑8 characters round-trip correctly.
+	```graphql
+	query { demons { id name level age } }
+	```
+
+	- Orders filtered by issued_at (DATETIME string) and status (recommended: use variables)
+
+	Query (use the Variables pane):
+
+	```graphql
+	query OrdersByDate($issuedAt: String!, $status: String!) {
+		ordersByIssuedAt(issued_at: $issuedAt, status: $status) {
+			id
+			order_id
+			supplier_id
+			item_id
+			status
+			qty
+			net_price
+			tax_rate
+			issued_at
+			completed_at
+			spec
+		}
+	}
+	```
+
+	Variables (example):
+
+	```json
+	{
+		"issuedAt": "2025-01-01 00:00:00",
+		"status": "shipped"
+	}
+	```
+
+	- Orders filtered by minutes in the past (use `ordersByIssuedAtMins`):
+
+	```graphql
+	query OrdersByMins($mins: Int!, $status: String!) {
+		ordersByIssuedAtMins(issuedAtMins: $mins, status: $status) {
+			id
+			order_id
+			status
+			qty
+			issued_at
+			spec
+		}
+	}
+	```
+
+	Variables example (last 60 minutes):
+
+	```json
+	{ "mins": 60, "status": "shipped" }
+	```
+
+	Notes:
+	- `Int` in GraphQL is signed 32-bit — negative values are allowed by the type system, but the resolver should validate semantics (e.g., reject negative minutes if you mean "minutes in the past").
+	- `issued_at` fields in the DB may be returned as epoch-ms strings in this demo; you can convert them to ISO strings in the resolver if desired.
+	- `spec` is stored as JSON in the DB and returned as a string by default; parsing it in the resolver will return a proper JSON object to clients.
+
+	## curl examples
+
+	POST with variables (recommended):
+
+	```bash
+	curl -sS \
+		-H "Content-Type: application/json; charset=utf-8" \
+		-X POST http://localhost:4000/graphql \
+		-d '{
+			"query":"query OrdersByDate($issuedAt: String!, $status: String!){ ordersByIssuedAt(issued_at: $issuedAt, status: $status){ id order_id status qty issued_at spec } }",
+			"variables": { "issuedAt": "2025-01-01 00:00:00", "status": "shipped" }
+		}'
+	```
+
+	Inline-literals (no variables):
+
+	```bash
+	curl -sS -X POST http://localhost:4000/graphql \
+		-H "Content-Type: application/json; charset=utf-8" \
+		-d '{ "query": "{ ordersByIssuedAt(issued_at:\"2025-01-01 00:00:00\", status:\"shipped\") { id order_id status qty issued_at } }" }'
+	```
+
+	## Environment configuration
+
+	All environment variables are centralized in `docker-compose.env` used by the `graphql` service. Important ones:
+
+	- `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` — primary DB
+	- `DEMON_DATABASE_HOST`, `DEMON_DATABASE_USER`, `DEMON_DATABASE_PASSWORD`, `DEMON_DATABASE_NAME` — secondary DB for slayers/demons
+	- `INVENTORY_DATABASE_*` — inventory DB settings (orders table)
+
+	After editing `docker-compose.env`, restart the service:
+
+	```bash
+	docker compose up -d --force-recreate graphql
+	```
+
+	## Charset / UTF-8 guidance
+
+	To avoid mojibake and show CJK/emoji correctly:
+
+	1. DDL: SQL files in `sql/` create DB/tables with `DEFAULT CHARSET=utf8mb4` and an utf8mb4 collation.
+	2. Import: the Makefile uses `mysql --default-character-set=utf8mb4` when importing the SQL files.
+	3. Connections: the Node pools are configured with `charset: 'utf8mb4'`.
+
+	If characters are still garbled, data was likely imported earlier with the wrong client charset (double-encoded). For demo data the simplest fix is to re-import (see `make mysql.reset`); for production data take backups and consider an in-place conversion carefully.
+
+	## Troubleshooting
+
+	- If the container fails to start, fetch logs and exit code:
+
+	```bash
+	docker compose ps
+	docker compose logs --no-color graphql --tail=300
+	```
+
+	- Common causes:
+		- Syntax or runtime errors in `server.js` or `schema.js` (check logs).
+		- Missing dependencies because `package.json` was not copied into the build context.
+		- DB connection issues — confirm MySQL is up (`docker compose ps mysql`) and credentials in `docker-compose.env` match.
+
+	## Next steps / addons
+
+	- Add resolver improvements: parse `spec` into JSON, convert epoch timestamps to ISO, validate `issuedAtMins` >= 0, add ORDER BY/LIMIT for pagination.
+	- Add a small integration test that runs a sample query against the container and asserts results and UTF-8 round-trip.
+
+	If you want any of those done I can patch `server.js` and update the README with examples and commands.

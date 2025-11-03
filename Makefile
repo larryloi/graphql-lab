@@ -24,7 +24,7 @@ CYAN := \033[36m
 WHITE := \033[37m
 RESET := \033[0m
 
-.PHONY: help ps up down logs build.app run mysql.create.schema mysql.reset shell.app shell.mysql query.slayers query.slayers.raw query.demons.raw query.graphiql
+.PHONY: help ps up down logs build.app run mysql.create.schema mysql.reset mysql.login shell.app shell.mysql query.slayers query.slayers.raw query.demons.raw query.graphiql
 
 help:
 				@echo "$(GREEN)Available targets:$(RESET)"
@@ -36,6 +36,7 @@ help:
 				@echo "  run                        - Run the GraphQL app Docker image"
 				@echo "  mysql.create.schema        - Create demo schemas in MySQL"
 				@echo "  mysql.reset                - Drop demo schemas in MySQL"
+				@echo "  mysql.login                - Open MySQL client shell in MySQL container"
 				@echo "  shell.app                  - Open shell in GraphQL app container"
 				@echo "  shell.mysql                - Open MySQL client shell in MySQL container"
 				@echo "  query.slayers              - Query slayers via GraphQL API"
@@ -52,9 +53,13 @@ ps:
 	@echo "$(GREEN)Listing containers...$(RESET)"
 	docker compose ps -a
 
+stop:
+	@echo "$(GREEN)Stopping containers...$(RESET)"
+	docker compose stop $(ct)
+
 down:
 	@echo "$(GREEN)Stopping containers...$(RESET)"
-	docker compose down
+	docker compose down $(ct)
 
 logs:
 	@echo "$(GREEN)Following logs...$(RESET)"
@@ -87,6 +92,9 @@ mysql.create.schema:
 	@echo "Applying demonslayer schema (using utf8mb4 client)..."
 	docker exec -i mysql mysql --default-character-set=utf8mb4 -uroot -pAbcd1234 < mysql/create_demonslayer_schema.sql || true
 	@echo "Schemas applied."
+	@echo "Applying inventory schema (using utf8mb4 client)..."
+	docker exec -i mysql mysql --default-character-set=utf8mb4 -uroot -pAbcd1234 < mysql/create_inventory_schema.sql || true
+	@echo "Schemas applied."
 
 .PHONY: mysql.reset
 mysql.reset:
@@ -95,13 +103,17 @@ mysql.reset:
 	docker exec -i mysql mysql -uroot -pAbcd1234 -e "DROP DATABASE IF EXISTS demo1; DROP DATABASE IF EXISTS demonslayer;" || true
 	@echo "Schemas applied."
 
+mysql.login:
+	@echo "$(GREEN)Opening shell in MySQL container...$(RESET)"
+	docker compose exec mysql mysql --default-character-set=utf8mb4 -hlocalhost -uroot -pAbcd1234 inventory
+
 shell.app:
 	@echo "$(GREEN)Opening shell in GraphQL app container...$(RESET)"
 	docker compose exec -it graphql /bin/sh
 
 shell.mysql:
 	@echo "$(GREEN)Opening shell in MySQL container...$(RESET)"
-	docker compose exec mysql mysql --default-character-set=utf8mb4 -hlocalhost -uroot -pAbcd1234 inventory
+	docker compose exec mysql /bin/sh
 
 query.slayers:
 	@echo "$(GREEN)Querying slayers...$(RESET)"
