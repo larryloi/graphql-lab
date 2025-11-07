@@ -50,9 +50,60 @@ const root = {
         });
     },
     slayers: (args) => {
-        // Query all slayers from demonslayer DB
+        // Query slayers with optional dynamic filters supplied via args.filter
+        const filter = (args && args.filter) || {};
+        const clauses = [];
+        const params = [];
+
+        if (filter.name) {
+            clauses.push('name = ?');
+            params.push(filter.name);
+        }
+        if (filter.prefix) {
+            clauses.push('name LIKE ?');
+            params.push(filter.prefix + '%');
+        }
+        if (filter.suffix) {
+            clauses.push('name LIKE ?');
+            params.push('%' + filter.suffix);
+        }
+        if (filter.contains) {
+            clauses.push('name LIKE ?');
+            params.push('%' + filter.contains + '%');
+        }
+        if (filter.ageEq !== undefined && filter.ageEq !== null) {
+            clauses.push('age = ?');
+            params.push(filter.ageEq);
+        }
+        if (filter.ageGt !== undefined && filter.ageGt !== null) {
+            clauses.push('age > ?');
+            params.push(filter.ageGt);
+        }
+        if (filter.ageLt !== undefined && filter.ageLt !== null) {
+            clauses.push('age < ?');
+            params.push(filter.ageLt);
+        }
+
+        // Build base SQL
+        let sql = 'SELECT * FROM slayers';
+        if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
+
+        // Whitelist ordering column names to avoid SQL injection
+        const allowedOrderCols = new Set(['id', 'name', 'age']);
+        let orderClause = '';
+        if (filter.orderBy && allowedOrderCols.has(filter.orderBy)) {
+            const dir = (filter.orderDir || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+            orderClause = ` ORDER BY ${filter.orderBy} ${dir}`;
+        }
+        sql += orderClause;
+
+        // Limit / offset with safe defaults
+        const limit = Number.isInteger(filter.limit) ? Math.min(Math.max(filter.limit, 1), 1000) : 100;
+        const offset = Number.isInteger(filter.offset) ? Math.max(filter.offset, 0) : 0;
+        sql += ' LIMIT ' + limit + ' OFFSET ' + offset;
+
         return new Promise((resolve, reject) => {
-            demonPool.query('SELECT * FROM slayers', (error, results) => {
+            demonPool.query(sql, params, (error, results) => {
                 if (error) return reject(error);
                 resolve(results);
             });
@@ -102,6 +153,132 @@ const root = {
             inventoryPool.query('SELECT * FROM orders WHERE issued_at >= TIMESTAMPADD(MINUTE, ? * -1, NOW()) AND status = ?', [issuedAtMins, status], (error, results) => {
                 if (error) return reject(error);
                 resolve(results);
+            });
+        });
+    },
+    ordersByUpdatedDate: (args) => {
+        const updatedDate = args.updatedDate;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE DATE(updated_at) = ? AND status = ?', [updatedDate, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    }
+    ,
+    ordersByUpdatedRange: (args) => {
+        const start = args.start;
+        const end = args.end;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE updated_at >= ? AND updated_at < ? AND status = ?', [start, end, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    },
+    ordersByIssuedRange: (args) => {
+        const start = args.start;
+        const end = args.end;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE issued_at >= ? AND issued_at < ? AND status = ?', [start, end, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    },
+    ordersByCompletedRange: (args) => {
+        const start = args.start;
+        const end = args.end;
+        const status = args.status;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE completed_at >= ? AND completed_at < ? AND status = ?', [start, end, status], (error, results) => {
+                if (error) return reject(error);
+                resolve(results);
+            });
+        });
+    },
+    ordersByCompletedRangeBySpecType: (args) => {
+        const start = args.start;
+        const end = args.end;
+        const specType = args.specType;
+        return new Promise((resolve, reject) => {
+            // Fetch rows in range then filter by spec.type in JS to handle both JSON and stringified-JSON stored values
+            inventoryPool.query('SELECT * FROM orders WHERE completed_at >= ? AND completed_at < ?', [start, end], (error, results) => {
+                if (error) return reject(error);
+                try {
+                    const filtered = results.filter(row => {
+                        if (!row.spec) return false;
+                        let specObj = null;
+                        // If column is JSON type, row.spec may already be an object
+                        if (typeof row.spec === 'object') {
+                            specObj = row.spec;
+                        } else if (typeof row.spec === 'string') {
+                            try {
+                                specObj = JSON.parse(row.spec);
+                            } catch (e) {
+                                // If parsing fails, attempt to unescape common double-encoded strings
+                                try {
+                                    const unescaped = row.spec.replace(/\\"/g, '"');
+                                    specObj = JSON.parse(unescaped);
+                                } catch (e2) {
+                                    return false;
+                                }
+                            }
+                        }
+                        return specObj && specObj.type === specType;
+                    });
+                    resolve(filtered);
+                } catch (e) {
+                    return reject(e);
+                }
+            });
+        });
+    },
+    orderByOrderId: (args) => {
+        const orderId = args.order_id;
+        return new Promise((resolve, reject) => {
+            inventoryPool.query('SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId], (error, results) => {
+                if (error) return reject(error);
+                resolve(results[0] || null);
+            });
+        });
+    },
+    ordersByCompletedSpecAndMinValue: (args) => {
+        const start = args.start;
+        const end = args.end;
+        const specType = args.specType;
+        const minValue = args.minValue;
+        return new Promise((resolve, reject) => {
+            // Fetch rows in range and with value filter, then filter spec.type in JS to handle stringified JSON
+            inventoryPool.query('SELECT * FROM orders WHERE completed_at >= ? AND completed_at < ? AND qty * net_price >= ?', [start, end, minValue], (error, results) => {
+                if (error) return reject(error);
+                try {
+                    const filtered = results.filter(row => {
+                        if (!row.spec) return false;
+                        let specObj = null;
+                        if (typeof row.spec === 'object') {
+                            specObj = row.spec;
+                        } else if (typeof row.spec === 'string') {
+                            try {
+                                specObj = JSON.parse(row.spec);
+                            } catch (e) {
+                                try {
+                                    const unescaped = row.spec.replace(/\\"/g, '"');
+                                    specObj = JSON.parse(unescaped);
+                                } catch (e2) {
+                                    return false;
+                                }
+                            }
+                        }
+                        return specObj && specObj.type === specType;
+                    });
+                    resolve(filtered);
+                } catch (e) {
+                    return reject(e);
+                }
             });
         });
     }

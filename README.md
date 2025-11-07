@@ -1,8 +1,8 @@
 # graphql-lab
 
-## Docker image for `graphql_api`
+## Docker image for `graphql`
 
-This repository includes a `Dockerfile` intended for a Node.js-based GraphQL API. The `docker-compose.yaml` service `graphql_api` builds the image from the project root and maps port `4000`.
+This repository includes a `Dockerfile` intended for a Node.js-based GraphQL API. The `docker-compose.yaml` service `graphql` builds the image from the project root and maps port `4000`.
 
 Assumptions:
 - The GraphQL API is implemented in Node.js.
@@ -17,19 +17,19 @@ docker-compose build
 docker-compose up -d
 
 # View logs
-docker-compose logs -f graphql_api
+docker-compose logs -f graphql
 ```
 
 If you prefer building the image manually:
 
 ```bash
-docker build -t graphql_api:local .
+docker build -t graphql:local .
 docker run --rm -p 4000:4000 \
 	-e DATABASE_HOST=mysql_db \
 	-e DATABASE_USER=admin \
 	-e DATABASE_PASSWORD=Abcd1234 \
 	-e DATABASE_NAME=inventory \
-	graphql_api:local
+	graphql:local
 ```
 
 If your project is not Node.js, tell me which language/framework you use (Python/Graphene, Go, Ruby, etc.) and I will provide an alternative Dockerfile.
@@ -42,7 +42,7 @@ Recommended: use docker compose which in this repo is configured to run a MySQL 
 
 ```bash
 cd /docker/graphql-lab
-docker compose up -d mysql graphql_api
+docker compose up -d mysql graphql
 ```
 
 2. Import demo schemas (creates `demo1` and `demonslayer` DBs and seed data):
@@ -96,7 +96,7 @@ make mysql.create.schema
 	docker compose up -d mysql graphql
 	```
 
-	Note: the compose service name for the app in this repo is `graphql` (not `graphql_api`).
+	Note: the compose service name for the app in this repo is `graphql`
 
 	2. Import demo schemas and seed data (this uses the MySQL client with utf8mb4):
 
@@ -135,6 +135,30 @@ make mysql.create.schema
 
 	```graphql
 	query { demons { id name level age } }
+	```
+
+	- Dynamic slayers query (filtering)
+
+	```graphql
+	# Use the `filter` input to do exact, prefix, contains, and age comparisons
+	query GetSlayers($filter: SlayerFilter) {
+	  slayers(filter: $filter) {
+	    id
+	    name
+	    breathing_style
+	    age
+	  }
+	}
+	```
+
+	# Variables examples
+
+	```json
+	{ "filter": { "name": "Tanjiro Kamado" } }
+	```
+
+	```json
+	{ "filter": { "prefix": "Tan", "orderBy": "age", "orderDir": "ASC", "limit": 50 } }
 	```
 
 	- Orders filtered by issued_at (DATETIME string) and status (recommended: use variables)
@@ -187,6 +211,141 @@ make mysql.create.schema
 
 	```json
 	{ "mins": 60, "status": "shipped" }
+	```
+
+	## Inventory.orders: additional query examples
+
+	Below are examples for the extra queries provided by the API that operate on the `inventory.orders` table.
+
+	1) updated_at range + status
+
+	```graphql
+	query OrdersByUpdatedRange($start: String!, $end: String!, $status: String!) {
+	  ordersByUpdatedRange(start: $start, end: $end, status: $status) {
+	    id
+	    order_id
+	    status
+	    qty
+	    net_price
+	    updated_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "start": "2025-11-01 00:00:00", "end": "2025-11-02 00:00:00", "status": "shipped" }
+	```
+
+	2) issued_at range + status
+
+	```graphql
+	query OrdersByIssuedRange($start: String!, $end: String!, $status: String!) {
+	  ordersByIssuedRange(start: $start, end: $end, status: $status) {
+	    id
+	    order_id
+	    status
+	    qty
+	    net_price
+	    issued_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "start": "2025-11-01 00:00:00", "end": "2025-11-02 00:00:00", "status": "created" }
+	```
+
+	3) completed_at range + status
+
+	```graphql
+	query OrdersByCompletedRange($start: String!, $end: String!, $status: String!) {
+	  ordersByCompletedRange(start: $start, end: $end, status: $status) {
+	    id
+	    order_id
+	    status
+	    qty
+	    net_price
+	    completed_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "start": "2025-10-01 00:00:00", "end": "2025-11-01 00:00:00", "status": "completed" }
+	```
+
+	4) completed range + spec.type
+
+	```graphql
+	query OrdersByCompletedRangeBySpecType($start: String!, $end: String!, $specType: String!) {
+	  ordersByCompletedRangeBySpecType(start: $start, end: $end, specType: $specType) {
+	    id
+	    order_id
+	    status
+	    completed_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "start": "2025-10-01 00:00:00", "end": "2025-11-01 00:00:00", "specType": "vehicle" }
+	```
+
+	5) lookup by order_id
+
+	```graphql
+	query OrderById($orderId: String!) {
+	  orderByOrderId(order_id: $orderId) {
+	    id
+	    order_id
+	    status
+	    qty
+	    net_price
+	    issued_at
+	    completed_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "orderId": "52fd99b1-c2ce-41ce-93ab-911f082a74ab" }
+	```
+
+	6) completed range + spec.type + min qty*net_price
+
+	```graphql
+	query OrdersByCompletedSpecAndMinValue($start: String!, $end: String!, $specType: String!, $minValue: Float!) {
+	  ordersByCompletedSpecAndMinValue(start: $start, end: $end, specType: $specType, minValue: $minValue) {
+	    id
+	    order_id
+	    status
+	    qty
+	    net_price
+	    completed_at
+	    spec
+	  }
+	}
+	```
+
+	Variables:
+
+	```json
+	{ "start": "2025-10-01 00:00:00", "end": "2025-11-01 00:00:00", "specType": "vehicle", "minValue": 10000.0 }
 	```
 
 	Notes:
