@@ -154,12 +154,21 @@ make mysql.create.schema
 	# Variables examples
 
 	```json
-	{ "filter": { "name": "Tanjiro Kamado" } }
+	"filter": { "name": "富岡義勇" }
 	```
 
 	```json
 	{ "filter": { "prefix": "Tan", "orderBy": "age", "orderDir": "ASC", "limit": 50 } }
 	```
+
+	```json
+	{ "filter": { "ageGt": 10, "orderBy": "age", "orderDir": "ASC", "limit": 50 } }
+	```
+
+	```json
+	{ "filter": { "contains": "郎" } }
+	```
+
 
 	- Orders filtered by issued_at (DATETIME string) and status (recommended: use variables)
 
